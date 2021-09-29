@@ -1,0 +1,164 @@
+<template>
+  <el-dialog
+    :title="!dataForm.id ? '新增' : '修改'"
+    :close-on-click-modal="false"
+    :visible.sync="visible">
+    <el-form :model="dataForm" :rules="dataRule" ref="dataForm" @keyup.enter.native="dataFormSubmit()" label-width="80px">
+    <el-form-item label="标题" prop="title">
+      <el-input v-model="dataForm.title" placeholder="ddd"></el-input>
+    </el-form-item>
+    <el-form-item label="发布日期" prop="date">
+          <el-date-picker
+            v-model="value"
+            type="date"
+            placeholder="选择日期"
+            >
+          </el-date-picker>
+    </el-form-item>
+    <el-form-item label="作者" prop="author">
+      <el-input v-model="dataForm.author" placeholder="作者"></el-input>
+    </el-form-item>
+    <el-form-item label="描述" prop="descri">
+      <el-input v-model="dataForm.descri" placeholder="描述"></el-input>
+    </el-form-item>
+    <div id="app">
+      <ckeditor id="newseditor" v-model="editorData" :config="editorConfig" @ready="onEditorReady"></ckeditor>
+    </div>
+    </el-form>
+    <span slot="footer" class="dialog-footer">
+      <el-button @click="visible = false">取消</el-button>
+      <el-button type="primary" @click="dataFormSubmit()">确定</el-button>
+    </span>
+  </el-dialog>
+</template>
+
+<script>
+  import Vue from 'vue'
+  import CKEditor from 'ckeditor4-vue'
+  var token = Vue.cookie.get('token')
+  var ed = null
+  export default {
+    data () {
+      return {
+        value: '',
+        editorData: '',
+        editorConfig: {
+          height: 500,
+          font_names: '宋体/宋体;黑体/黑体;仿宋/仿宋_GB2312;楷体/楷体_GB2312;隶书/隶书;幼圆/幼圆;微软雅黑/微软雅黑;Arial;Times New Roman;Verdana;Comic Sans MS/Comic Sans MS, cursive;Courier New/Courier New, Courier, monospace;Georgia/Georgia, serif;Lucida Sans Unicode/Lucida Sans Unicode, Lucida Grande, sans-serif;Tahoma/Tahoma, Geneva, sans-serif;Trebuchet MS/Trebuchet MS, Helvetica, sans-serif;',
+          // filebrowserImageUploadUrl: 'http://192.168.10.88:8898/renren-fast/generator/news/test?token=' + token,
+          filebrowserImageUploadUrl: 'http://182.92.201.115:8898/chunjiang/generator/news/test?token=' + token,
+          uploadUrl: 'http://182.92.201.115:8898/chunjiang/generator/news/uploadPasteImage?token=' + token,
+          // 配置中文
+          language: 'zh-cn',
+          extraPlugins: 'uploadimage,button,toolbar,notification,clipboard,lineutils,dialogui,dialog,widgetselection,widget,uicolor,font,colorbutton,justify,showblocks'
+        },
+        visible: false,
+        dataForm: {
+          title: '',
+          updated: '',
+          author: '',
+          descri: '',
+          content: '',
+          id: 0,
+          cover: ''
+        },
+        dataRule: {
+          title: [
+            { required: true, message: '标题不能为空', trigger: 'blur' }
+          ],
+          updated: [
+            { required: true, message: '发布日期不能为空', trigger: 'blur' }
+          ],
+          descri: [
+            { required: true, message: '描述不能为空', trigger: 'blur' }
+          ]
+        }
+      }
+    },
+    components: {
+      // Use the <ckeditor> component in this view.
+      ckeditor: CKEditor.component
+    },
+    methods: {
+      onEditorReady (editor) {
+        // vue中获取CKEditor对象的方法
+        ed = editor
+      },
+      init (id) {
+        this.dataForm.id = id || 0
+        this.visible = true
+        this.$nextTick(() => {
+          this.$refs['dataForm'].resetFields()
+          if (this.dataForm.id) {
+            this.$http({
+              url: this.$http.adornUrl(`/generator/recruit/en/info/${this.dataForm.id}`),
+              method: 'get',
+              params: this.$http.adornParams()
+            }).then(({data}) => {
+              if (data && data.code === 0) {
+                this.dataForm.title = data.recruit.title
+                this.dataForm.author = data.recruit.author
+                this.dataForm.descri = data.recruit.descri
+                let d = data.recruit.updated
+                let date = null
+                if (d === 'NaN-NaN-NaN' || d === null || d === undefined) {
+                  date = new Date()
+                } else {
+                  date = new Date(d)
+                }
+                this.value = date
+                this.editorData = data.recruit.content
+              }
+            })
+          }
+        })
+      },
+      dateToString (date) {
+        var year = date.getFullYear()
+        var month = (date.getMonth() + 1).toString()
+        var day = (date.getDate()).toString()
+        if (month.length === 1) {
+          month = '0' + month
+        }
+        if (day.length === 1) {
+          day = '0' + day
+        }
+        var dateTime = year + '-' + month + '-' + day
+        return dateTime
+      },
+      // 表单提交
+      dataFormSubmit () {
+        this.$refs['dataForm'].validate((valid) => {
+          if (valid) {
+            this.$http({
+              url: this.$http.adornUrl(`/generator/recruit/en/${!this.dataForm.id ? 'save' : 'update'}`),
+              method: 'post',
+              data: this.$http.adornData({
+                'title': this.dataForm.title,
+                'updated': this.dateToString(this.value),
+                'author': this.dataForm.author,
+                'descri': this.dataForm.descri,
+                'content': ed.getData(),
+                'id': this.dataForm.id || undefined
+              })
+            }).then(({data}) => {
+              if (data && data.code === 0) {
+                this.$message({
+                  message: '操作成功',
+                  type: 'success',
+                  duration: 1500,
+                  onClose: () => {
+                    this.visible = false
+                    this.$emit('refreshDataList')
+                  }
+                })
+              } else {
+                this.$message.error(data.msg)
+              }
+            })
+          }
+        })
+      }
+    }
+  }
+</script>
